@@ -1,0 +1,10 @@
+.serverless
+*.pyc
+*.pyo
+node_modules
+db.sqlite
+credentials.json
+token.pickle
+.venv
+.requirements.zip
+.env
