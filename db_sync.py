@@ -25,11 +25,18 @@ logger.addHandler(logging.StreamHandler())
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 class DatabaseSync:
-    def __init__(self, notion_token: str, notion_database_id: str):
+    def __init__(self, notion_token: str, notion_bodyweight_database_id: str, notion_exercise_database_id: str):
         self.notion = Client(auth=notion_token)
-        self.notion_database_id = notion_database_id
+        self.notion_bodyweight_database_id = notion_bodyweight_database_id
+        self.notion_exercise_database_id = notion_exercise_database_id
         self.temp_dir = tempfile.mkdtemp()
         self.db_path = os.path.join(self.temp_dir, "db.sqlite")
+        self.get_latest_backup_file()
+
+    def __del__(self):
+        os.remove(self.db_path)
+        os.rmdir(self.temp_dir)
+
         
     def get_latest_backup_file(self) -> str:
         """Get the latest FitNotes backup file from Google Drive."""
@@ -92,10 +99,10 @@ class DatabaseSync:
             
         return self.db_path
     
-    def get_existing_notion_records(self) -> List[str]:
+    def get_existing_bodyweight_notion_records(self) -> List[str]:
         """Get all existing record IDs from Notion database."""
         results = self.notion.databases.query(
-            database_id=self.notion_database_id,
+            database_id=self.notion_bodyweight_database_id,
             page_size=100
         )
         
@@ -105,16 +112,14 @@ class DatabaseSync:
         
         return notion_ids
     
-    def sync_to_notion(self):
+    def sync_bodyweight(self):
         """Sync SQLite records to Notion database."""
-        # Download the latest backup file
-        self.get_latest_backup_file()
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         # Get existing Notion record IDs
-        existing_notion_ids = self.get_existing_notion_records()
+        existing_notion_ids = self.get_existing_bodyweight_notion_records()
 
         logger.info("Found existing notion ids: %s", existing_notion_ids)
 
@@ -135,7 +140,7 @@ class DatabaseSync:
             
             # Create new page in Notion
             new_page = {
-                "parent": {"database_id": self.notion_database_id},
+                "parent": {"database_id": self.notion_bodyweight_database_id},
                 "sql_id": { 
                     "number": sqlite_id
                 },
@@ -164,21 +169,90 @@ class DatabaseSync:
                 logger.error(f"Failed to sync record {sqlite_id} to Notion: {str(e)}")
         
         conn.close()
-        # Clean up temporary file
-        os.remove(self.db_path)
-        os.rmdir(self.temp_dir)
+
+    def get_existing_exercise_notion_records(self) -> List[str]:
+        """Get all existing exercise record IDs from Notion database."""
+        results = self.notion.databases.query(
+            database_id=self.notion_exercise_database_id,
+            page_size=100
+        )
+        
+        notion_ids = []
+        for page in results["results"]:
+            notion_ids.append(page["properties"]["sql_id"]["number"])
+        
+        return notion_ids
+
+    def sync_exercises(self):
+        """Sync exercise records from SQLite to Notion database."""
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Get existing Notion record IDs
+        existing_notion_ids = self.get_existing_exercise_notion_records()
+
+        logger.info("Found existing exercise notion ids: %s", existing_notion_ids)
+
+        # Get exercise records from SQLite that don't have a notion_id
+        cursor.execute("""
+            SELECT _id, name
+            FROM exercise
+            ORDER BY name ASC
+        """)
+        
+        exercises = cursor.fetchall()
+
+        logger.info("Found exercises: %s", exercises)
+        
+        for exercise in filter(lambda x: x[0] not in existing_notion_ids, exercises):
+            sqlite_id, name = exercise
+            
+            # Create new page in Notion
+            new_page = {
+                "parent": {"database_id": self.notion_exercise_database_id},
+                "properties": {
+                    "sql_id": {
+                        "number": sqlite_id
+                    },
+                    "Name": {
+                        "title": [
+                            {
+                                "text": {
+                                    "content": name
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+            
+            try:
+                response = self.notion.pages.create(**new_page)
+                notion_id = response["id"]
+                
+                logger.info(f"Successfully synced exercise {sqlite_id} to Notion: {notion_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to sync exercise {sqlite_id} to Notion: {str(e)}")
+        
+        conn.close()
+
+
 
 def run(event, context):
     """Main function to run the sync."""
     notion_token = os.getenv("NOTION_API_KEY")
-    notion_database_id = os.getenv("NOTION_DATABASE_ID")
+    notion_bodyweight_database_id = os.getenv("NOTION_BODYWEIGHT_DATABASE_ID")
+    notion_exercise_database_id = os.getenv("NOTION_EXERCISE_DATABASE_ID")
     
-    if not notion_token or not notion_database_id:
+    if not notion_token or not notion_bodyweight_database_id or not notion_exercise_database_id:
         logger.error("NOTION_TOKEN or NOTION_DATABASE_ID environment variables not set")
         return
     
-    sync = DatabaseSync(notion_token, notion_database_id)
-    sync.sync_to_notion() 
+    sync = DatabaseSync(notion_token, notion_bodyweight_database_id, notion_exercise_database_id)
+    sync.sync_bodyweight()
+    sync.sync_exercises()
 
 if __name__ == "__main__":
     run({}, {})

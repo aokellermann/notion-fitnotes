@@ -10,8 +10,8 @@ provider:
   runtime: python3.13
   environment:
     NOTION_API_KEY: ${env:NOTION_API_KEY}
-    NOTION_DATABASE_ID: ${env:NOTION_DATABASE_ID}
-
+    NOTION_BODYWEIGHT_DATABASE_ID: ${env:NOTION_BODYWEIGHT_DATABASE_ID}
+    NOTION_EXERCISE_DATABASE_ID: ${env:NOTION_EXERCISE_DATABASE_ID}
 functions:
   sync:
     handler: db_sync.run
