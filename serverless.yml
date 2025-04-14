@@ -12,6 +12,8 @@ provider:
     NOTION_API_KEY: ${env:NOTION_API_KEY}
     NOTION_BODYWEIGHT_DATABASE_ID: ${env:NOTION_BODYWEIGHT_DATABASE_ID}
     NOTION_EXERCISE_DATABASE_ID: ${env:NOTION_EXERCISE_DATABASE_ID}
+    NOTION_WORKOUT_DATABASE_ID: ${env:NOTION_WORKOUT_DATABASE_ID}
+
 functions:
   sync:
     handler: db_sync.run
@@ -25,6 +27,7 @@ plugins:
   - serverless-plugin-common-excludes
   - serverless-plugin-include-dependencies
   - serverless-python-requirements
+
 package:
   exclude:
     - .venv/**
