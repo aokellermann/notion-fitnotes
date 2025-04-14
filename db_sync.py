@@ -263,4 +263,5 @@ def run(event, context):
 
 
 if __name__ == "__main__":
+    os.environ["IS_OFFLINE"] = "true"
     run({}, {})
