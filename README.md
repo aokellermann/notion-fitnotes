@@ -9,7 +9,8 @@ Create a google cloud oauth2 client credentials with redirect to http://localhos
 Create the following databases and share them with the integration:
 - Bodyweight: `sql_id` (number), `Date` (date), `Value` (number)
 - Exercises: `sql_id` (number), `Name` (title)
-- Workouts: `sql_id` (number), `Exercise` (relation to `Exercises`), `Date` (date), `Weight` (number), `Reps` (number)
+- Strength: `sql_id` (number), `Exercise` (relation to `Exercises`), `Date` (date), `Weight` (number), `Reps` (number)
+- Cardio: `sql_id` (number), `Exercise` (relation to `Exercises`), `Date` (date), `Duration` (number),` Distance` (number)
 
 Create a .env file:
 
@@ -18,7 +19,8 @@ SLS_ORG=
 NOTION_API_KEY=secret...
 NOTION_BODYWEIGHT_DATABASE_ID=
 NOTION_EXERCISE_DATABASE_ID=
-NOTION_WORKOUT_DATABASE_ID=
+NOTION_STRENGTH_DATABASE_ID=
+NOTION_CARDIO_DATABASE_ID=
 ```
 
 Install requirements with python 3.13:

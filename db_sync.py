@@ -26,7 +26,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 KG_TO_LBS = 2.2046226218
 
-def workout_mapping(record, self):
+def strength_mapping(record, self):
     exercise_sql_id_to_notion_id = {
         page["properties"]["sql_id"]["number"]: page["id"]
         for page in self.notion_results["exercise"]
@@ -46,6 +46,26 @@ def workout_mapping(record, self):
         "Reps": {"number": record[4]},
     }
 
+def cardio_mapping(record, self):
+    exercise_sql_id_to_notion_id = {
+        page["properties"]["sql_id"]["number"]: page["id"]
+        for page in self.notion_results["exercise"]
+    }
+
+    logger.info("Exercise sql id to notion id: %s", exercise_sql_id_to_notion_id[record[2]])
+    return {
+        "sql_id": {"number": record[0]},
+        "Date": {"date": {"start": record[1]}},
+        "Exercise": {
+            "type": "relation",
+            "relation": [
+                {"id": exercise_sql_id_to_notion_id[record[2]]}
+            ]
+        },
+        "Duration": {"number": record[3]},
+        "Distance": {"number": record[4]},
+    }
+
 SQL_NOTION_MAPPING = {
     "bodyweight": {
         "query": "SELECT _id, date, value FROM MeasurementRecord WHERE measurement_id = 1 ORDER BY date DESC",
@@ -62,9 +82,21 @@ SQL_NOTION_MAPPING = {
             "Name": {"title": [{"text": {"content": record[1]}}]},
         },
     },
-    "workout": {
-        "query": "SELECT _id, date, exercise_id, metric_weight, reps FROM training_log ORDER BY date DESC",
-        "mapping": workout_mapping,
+    "strength": {
+        "query": """SELECT tl._id, tl.date, tl.exercise_id, tl.metric_weight, tl.reps
+                    FROM training_log tl
+                    JOIN exercise e ON tl.exercise_id = e._id
+                    WHERE e.exercise_type_id = 0
+                    ORDER BY tl.date DESC""",
+        "mapping": strength_mapping,
+    },
+    "cardio": {
+        "query": """SELECT tl._id, tl.date, tl.exercise_id, tl.duration_seconds, tl.distance
+                    FROM training_log tl
+                    JOIN exercise e ON tl.exercise_id = e._id
+                    WHERE e.exercise_type_id = 1
+                    ORDER BY tl.date DESC""",
+        "mapping": cardio_mapping,
     },
 }
 
@@ -75,13 +107,15 @@ class DatabaseSync:
         notion_token: str,
         notion_bodyweight_database_id: str,
         notion_exercise_database_id: str,
-        notion_workout_database_id: str,
+        notion_strength_database_id: str,
+        notion_cardio_database_id: str,
     ):
         self.notion = Client(auth=notion_token)
         self.notion_database_ids = {
             "bodyweight": notion_bodyweight_database_id,
             "exercise": notion_exercise_database_id,
-            "workout": notion_workout_database_id,
+            "strength": notion_strength_database_id,
+            "cardio": notion_cardio_database_id,
         }
         self.notion_results = {}
         self.temp_dir = tempfile.mkdtemp()
@@ -230,9 +264,13 @@ class DatabaseSync:
         """Sync exercise records from SQLite to Notion database."""
         self._sync_table("exercise")
 
-    def sync_workouts(self):
-        """Sync workout records from SQLite to Notion database."""
-        self._sync_table("workout")
+    def sync_strength(self):
+        """Sync strength records from SQLite to Notion database."""
+        self._sync_table("strength")
+
+    def sync_cardio(self):
+        """Sync cardio records from SQLite to Notion database."""
+        self._sync_table("cardio")
 
 
 def run(event, context):
@@ -240,13 +278,15 @@ def run(event, context):
     notion_token = os.getenv("NOTION_API_KEY")
     notion_bodyweight_database_id = os.getenv("NOTION_BODYWEIGHT_DATABASE_ID")
     notion_exercise_database_id = os.getenv("NOTION_EXERCISE_DATABASE_ID")
-    notion_workout_database_id = os.getenv("NOTION_WORKOUT_DATABASE_ID")
+    notion_strength_database_id = os.getenv("NOTION_STRENGTH_DATABASE_ID")
+    notion_cardio_database_id = os.getenv("NOTION_CARDIO_DATABASE_ID")
 
     if (
         not notion_token
         or not notion_bodyweight_database_id
         or not notion_exercise_database_id
-        or not notion_workout_database_id
+        or not notion_strength_database_id
+        or not notion_cardio_database_id
     ):
         logger.error("Environment variables not set")
         return
@@ -255,11 +295,13 @@ def run(event, context):
         notion_token,
         notion_bodyweight_database_id,
         notion_exercise_database_id,
-        notion_workout_database_id,
+        notion_strength_database_id,
+        notion_cardio_database_id,
     )
     sync.sync_bodyweight()
     sync.sync_exercises()
-    sync.sync_workouts()
+    sync.sync_strength()
+    sync.sync_cardio()
 
 
 if __name__ == "__main__":
